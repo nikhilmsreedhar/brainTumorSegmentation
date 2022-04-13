@@ -22,6 +22,7 @@ from tensorboardX import SummaryWriter
 from torch import nn
 
 
+
 local_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
 parser = argparse.ArgumentParser()
@@ -78,9 +79,13 @@ parser.add_argument('--weight_decay', default=1e-5, type=float)
 
 parser.add_argument('--amsgrad', default=True, type=bool)
 
-parser.add_argument('--criterion', default='softmax_dice', type=str)
+parser.add_argument('--criterion', default='softmax_dice2', type=str)
 
 parser.add_argument('--score', default='Dice', type=str)
+
+parser.add_argument('--scoreRegions', default='softmax_diceScoreRegions', type=str)
+
+#parser.add_argument('--Hdist', default='Hausdorff_distance', type=str)
 
 parser.add_argument('--num_class', default=4, type=int)
 
@@ -139,6 +144,8 @@ def main_worker():
 
     criterion = getattr(criterions, args.criterion)
     diceScore = getattr(criterions, args.score)
+    diceScoreRegions = getattr(criterions, args.scoreRegions)
+    
 
     if args.local_rank == 0:
         checkpoint_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'checkpoint', args.experiment+args.date)
@@ -192,16 +199,26 @@ def main_worker():
 
             output = model(x)
 
-            loss, loss1, loss2, loss3 = criterion(output, target)
+            loss, loss0, loss1, loss2, loss4 = criterion(output, target)
             scre = diceScore(output, target)
+            score0, score1, score2, score4 = diceScoreRegions(output, target)
+            
             reduce_loss = all_reduce_tensor(loss, world_size=num_gpu).data.cpu().numpy()
+            reduce_loss0 = all_reduce_tensor(loss0, world_size=num_gpu).data.cpu().numpy()
             reduce_loss1 = all_reduce_tensor(loss1, world_size=num_gpu).data.cpu().numpy()
             reduce_loss2 = all_reduce_tensor(loss2, world_size=num_gpu).data.cpu().numpy()
-            reduce_loss3 = all_reduce_tensor(loss3, world_size=num_gpu).data.cpu().numpy()
+            reduce_loss4 = all_reduce_tensor(loss4, world_size=num_gpu).data.cpu().numpy()
+            reduce_score0 = all_reduce_tensor(score0, world_size=num_gpu).data.cpu().numpy()
+            reduce_score1 = all_reduce_tensor(score1, world_size=num_gpu).data.cpu().numpy()
+            reduce_score2 = all_reduce_tensor(score2, world_size=num_gpu).data.cpu().numpy()
+            reduce_score4 = all_reduce_tensor(score4, world_size=num_gpu).data.cpu().numpy()
+            
+            
             DiceScore = all_reduce_tensor(scre, world_size=num_gpu).data.cpu().numpy()
+
             if args.local_rank == 0:
-                logging.info('Epoch: {}; step:{} || Dice Score: {:.5f} || Softmax Dice loss: {:.5f} || 1:{:.4f} | 2:{:.4f} | 3:{:.4f} ||'
-                             .format(epoch, i, DiceScore, reduce_loss, reduce_loss1, reduce_loss2, reduce_loss3))
+                logging.info('Epoch: {}; step:{} || Dice Score: {:.5f} || Dice Score for enhancing tumor region (ET): {:.5f} || Dice Score for tumor core region (TC): {:.5f}|| Dice Score for whole tumor region (WT): {:.5f} || Softmax Dice loss: {:.5f} || Loss for background region (label 0):{:.4f} | Loss for necrotic and non-enhancing tumor region (label 1):{:.4f} | Loss for peritumoral edema region (label 2):{:.4f} || Loss for GD(Gadolinium)-enhancing tumor region 4:{:.4f} |'
+                             .format(epoch, i, DiceScore, reduce_score4, (reduce_score1+reduce_score4)/2, (reduce_score1+reduce_score2+reduce_score4)/3, reduce_loss, reduce_loss0, reduce_loss1, reduce_loss2, reduce_loss4))
 
             optimizer.zero_grad()
             loss.backward()
@@ -222,10 +239,17 @@ def main_worker():
                     file_name)
 
             writer.add_scalar('lr:', optimizer.param_groups[0]['lr'], epoch)
+            writer.add_scalar('Dice Score:', DiceScore, epoch)
             writer.add_scalar('loss:', reduce_loss, epoch)
+            writer.add_scalar('loss0:', reduce_loss0, epoch)
             writer.add_scalar('loss1:', reduce_loss1, epoch)
             writer.add_scalar('loss2:', reduce_loss2, epoch)
-            writer.add_scalar('loss3:', reduce_loss3, epoch)
+            writer.add_scalar('loss4:', reduce_loss4, epoch)
+            writer.add_scalar('score0:', reduce_score0, epoch)
+            writer.add_scalar('score1:', reduce_score1, epoch)
+            writer.add_scalar('score2:', reduce_score2, epoch)
+            writer.add_scalar('score4:', reduce_score4, epoch)
+            
 
         if args.local_rank == 0:
             epoch_time_minute = (end_epoch-start_epoch)/60
