@@ -2,6 +2,8 @@ import torch
 import logging
 import torch.nn.functional as F
 from torch.autograd import Variable
+import numpy as np
+from scipy import ndimage
 
 def expand_target(x, n_class,mode='softmax'):
     """
@@ -44,6 +46,11 @@ def Dice(output, target, eps=1e-5):
     den = output.sum() + target.sum() + eps
     return 1.0 - num/den
 
+def dice_score(o, t, eps=1e-8):
+    num = 2*(o*t).sum() + eps
+    den = o.sum() + t.sum() + eps
+    return num/den
+
 
 def softmax_dice(output, target):
     '''
@@ -54,9 +61,10 @@ def softmax_dice(output, target):
     '''
     loss1 = Dice(output[:, 1, ...], (target == 1).float())
     loss2 = Dice(output[:, 2, ...], (target == 2).float())
-    loss3 = Dice(output[:, 3, ...], (target == 3).float())
+    loss3 = Dice(output[:, 3, ...], (target == 4).float())
 
     return loss1 + loss2 + loss3, 1-loss1.data, 1-loss2.data, 1-loss3.data
+    
 
 
 def softmax_dice2(output, target):
@@ -69,9 +77,18 @@ def softmax_dice2(output, target):
     loss0 = Dice(output[:, 0, ...], (target == 0).float())
     loss1 = Dice(output[:, 1, ...], (target == 1).float())
     loss2 = Dice(output[:, 2, ...], (target == 2).float())
-    loss3 = Dice(output[:, 3, ...], (target == 4).float())
+    loss4 = Dice(output[:, 3, ...], (target == 3).float())
 
-    return loss1 + loss2 + loss3 + loss0, 1-loss1.data, 1-loss2.data, 1-loss3.data
+    return loss0 + loss1 + loss2 + loss4, 1-loss0.data, 1-loss1.data, 1-loss2.data, 1-loss4.data
+    
+def softmax_diceScoreRegions(output, target):
+    
+    score0 = dice_score(output[:, 0, ...], (target == 0).float())
+    score1 = dice_score(output[:, 1, ...], (target == 1).float())
+    score2 = dice_score(output[:, 2, ...], (target == 2).float())
+    score4 = dice_score(output[:, 3, ...], (target == 3).float())
+
+    return 1-score0.data, 1-score1.data, 1-score2.data, 1-score4.data
 
 
 def sigmoid_dice(output, target):
@@ -135,3 +152,50 @@ def Dual_focal_loss(output, target):
     log = 1-(target - output)**2
 
     return -(F.log_softmax((1-(target - output)**2), 0)).mean(), 1-loss1.data, 1-loss2.data, 1-loss3.data
+    
+
+def border_map(binary_img,neigh):
+    """
+    Creates the border for a 3D image
+    """
+    binary_map = np.asarray(binary_img.cpu().detach().numpy(), dtype=np.uint8)
+    neigh = neigh
+    west = ndimage.shift(binary_map, [-1, 0,0,0], order=0)
+    east = ndimage.shift(binary_map, [1, 0,0,0], order=0)
+    north = ndimage.shift(binary_map, [0, 1,0,0], order=0)
+    south = ndimage.shift(binary_map, [0, -1,0,0], order=0)
+    top = ndimage.shift(binary_map, [0, 0, 1,0], order=0)
+    bottom = ndimage.shift(binary_map, [0, 0, -1,0], order=0)
+    cumulative = west + east + north + south + top + bottom
+    border = ((cumulative < 6) * binary_map) == 1
+    return border
+
+
+def border_distance(ref,seg):
+    """
+    This functions determines the map of distance from the borders of the
+    segmentation and the reference and the border maps themselves
+    """
+    neigh=8
+    border_ref = border_map(ref,neigh)
+    border_seg = border_map(seg,neigh)
+    oppose_ref = 1 - ref
+    oppose_seg = 1 - seg
+    # euclidean distance transform
+    distance_ref = ndimage.distance_transform_edt(oppose_ref)
+    distance_seg = ndimage.distance_transform_edt(oppose_seg)
+    distance_border_seg = border_ref * distance_seg
+    distance_border_ref = border_seg * distance_ref
+    return distance_border_ref, distance_border_seg#, border_ref, border_seg
+
+def Hausdorff_distance(ref,seg):
+    """
+    This functions calculates the average symmetric distance and the
+    hausdorff distance between a segmentation and a reference image
+    :return: hausdorff distance and average symmetric distance
+    """
+    ref_border_dist, seg_border_dist = border_distance(ref,seg)
+    hausdorff_distance = np.max(
+        [np.max(ref_border_dist), np.max(seg_border_dist)])
+    return hausdorff_distance
+
