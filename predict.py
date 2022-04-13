@@ -99,13 +99,13 @@ def validate_softmax(
         model,
         load_file,
         multimodel,
-        savepath='',  # when in validation set, you must specify the path to save the 'nii' segmentation results here
+        savepath='/output/results/',  # when in validation set, you must specify the path to save the 'nii' segmentation results here
         names=None,  # The names of the patients orderly!
-        verbose=False,
+        verbose=True,
         use_TTA=False,  # Test time augmentation, False as default!
-        save_format=None,  # ['nii','npy'], use 'nii' as default. Its purpose is for submission.
-        snapshot=False,  # for visualization. Default false. It is recommended to generate the visualized figures.
-        visual='',  # the path to save visualization
+        save_format='nii',  # ['nii','npy'], use 'nii' as default. Its purpose is for submission.
+        snapshot=True,  # for visualization. Default false. It is recommended to generate the visualized figures.
+        visual='/output/visualization/',  # the path to save visualization
         postprocess=False,  # Default False, when use postprocess, the score of dice_ET would be changed.
         valid_in_train=False,  # if you are valid when train
         ):
