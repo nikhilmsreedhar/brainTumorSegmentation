@@ -173,7 +173,7 @@ def border_map(binary_img,neigh):
 
 def border_distance(ref,seg):
     """
-    This functions determines the map of distance from the borders of the
+    This function determines the map of distance from the borders of the
     segmentation and the reference and the border maps themselves
     """
     neigh=8
@@ -190,7 +190,7 @@ def border_distance(ref,seg):
 
 def Hausdorff_distance(ref,seg):
     """
-    This functions calculates the average symmetric distance and the
+    This function calculates the average symmetric distance and the
     hausdorff distance between a segmentation and a reference image
     :return: hausdorff distance and average symmetric distance
     """
