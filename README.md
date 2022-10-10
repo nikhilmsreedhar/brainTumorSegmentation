@@ -15,6 +15,6 @@ Next, the user should run split.py to perform a train-test split to obtain a tra
 
 Finally, to perform the training, the user should run train.py file. Using the command line, go to the directory in which train.py is stored in and execute the command 'python -m torch.distributed.launch --nproc_per_node=2 --master_port 20003 train.py --batch_size 3 --end_epoch 400'. This will execute the training process for 400 epochs with a batch size of 3.
 
-If the user is utilizing a server with access to a GPU cluster (which is required for this project to run), simply go to the directory in which train.py is stored in and execute the command 'sbatch brainSeg.slurm'. To check the progress of the training process, execute the command 'cat tumor_seg.<Your Slurm JOB ID>.err'. This should output the Dice scores for the appropriate tumor regions.
+If the user is utilizing a server with access to a GPU cluster (which is required for this project to run), simply go to the directory in which train.py is stored in and execute the command 'sbatch brainSeg.slurm'. To check the progress of the training process, execute the command 'cat tumor_seg.(Your Slurm JOB ID).err'. This should output the Dice scores for the appropriate tumor regions.
 
 This project required the use of two Tesla V100 GPUs to execute training.
